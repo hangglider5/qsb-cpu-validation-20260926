@@ -32,12 +32,13 @@ Q8T static void checks(){
 Q8T static void bench(){
     const int G=512;const size_t N=(64ULL<<20)/sizeof(pt);
     std::vector<pt,qalloc64<pt>> table(N);for(auto &r:table){r.x=rand_fe();r.y=rand_fe();}
-    std::vector<size_t> idx(G*8);for(auto &i:idx)i=rng()%N;
+    // Rotate addresses so repeated batches do not collapse into 256 KiB of hot rows.
+    std::vector<uint32_t> idx(512*G*8);for(auto &i:idx)i=rng()%N;size_t active=0;
     buf X(G),Y(G),A(G),B(G),D(2*G),P(2*G),T(2*G);for(int h=0;h<G;++h){pack(A[h]);pack(B[h]);}
-    auto rowfn=[&](int h,const pt **out)->__mmask8{for(int j=0;j<8;++j)out[j]=&table[idx[h*8+j]];return (h*73)&255;};
+    auto rowfn=[&](int h,const pt **out)->__mmask8{for(int j=0;j<8;++j)out[j]=&table[idx[active+h*8+j]];return (h*73)&255;};
     auto trial=[&](bool tree,double seconds){
         size_t n=0;auto start=clock_type::now();double el=0;
-        do{memcpy(X.data(),A.data(),G*sizeof(fe8));memcpy(Y.data(),B.data(),G*sizeof(fe8));
+        do{active=(n%512)*G*8;memcpy(X.data(),A.data(),G*sizeof(fe8));memcpy(Y.data(),B.data(),G*sizeof(fe8));
             if(tree)ec8_window(X.data(),Y.data(),D.data(),P.data(),T.data(),G,rowfn);
             else ec8_window_chains(X.data(),Y.data(),D.data(),P.data(),T.data(),G,rowfn);
             alignas(64)uint64_t w[8];_mm512_store_si512(w,X[0].l[0]);sink=w[0];++n;

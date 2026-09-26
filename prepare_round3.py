@@ -17,7 +17,7 @@ tree=fetch('candidates/subset/tests/gpu_epochs/tree.cu')
 fetch('candidates/subset/tests/gpu_epochs/qsb_host_verify.h')
 fetch('candidates/subset/COPYING')
 fetch('candidates/subset/COPYING-secp256k1')
-for f in ['crypto.py','problem.py','verify.py','gpu_wrap.py','config.py']:
+for f in ['crypto.py','problem.py','verify.py','gpu_wrap.py','config.json']:
     fetch('harness/'+f)
 types=tree.split('/* Digest params loader */',1)[1].split('typedef struct {\n    uint64_t alpha[4]',1)[0]
 helpers=tree.split('static uint64_t binom_u64(',1)[1].split('#if QSB_HOST_VERIFY',1)[0]
