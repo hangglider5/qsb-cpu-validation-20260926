@@ -41,7 +41,7 @@ Q8T static void bench(){
         do{active=(n%512)*G*8;memcpy(X.data(),A.data(),G*sizeof(fe8));memcpy(Y.data(),B.data(),G*sizeof(fe8));
             if(tree)ec8_window(X.data(),Y.data(),D.data(),P.data(),T.data(),G,rowfn);
             else ec8_window_chains(X.data(),Y.data(),D.data(),P.data(),T.data(),G,rowfn);
-            alignas(64)uint64_t w[8];_mm512_store_si512(w,X[0].l[0]);sink=w[0];++n;
+            uint64_t w;memcpy(&w,&X[0].l[0],sizeof(w));sink=w;++n;
             el=std::chrono::duration<double>(clock_type::now()-start).count();
         }while(el<seconds);
         return el*1e9/(n*G*8);
