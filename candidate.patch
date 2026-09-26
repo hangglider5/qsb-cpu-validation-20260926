@@ -1,0 +1,61 @@
+diff --git a/candidates/subset/CpuGrindSubset.h b/candidates/subset/CpuGrindSubset.h
+index bbe6ce9..ccd8495 100644
+--- a/candidates/subset/CpuGrindSubset.h
++++ b/candidates/subset/CpuGrindSubset.h
+@@ -699,7 +699,7 @@ Q8T static void fe8_inv4(fe8 *x) {
+  * y is negated. The forward pass keeps tx - X (D) and the signed ty - Y (TY), so the backward pass never
+  * re-reads the table: x3 = lam^2 - D - 2X (after Meganpark980320's bb2a3eb7). */
+ template <class RowFn>
+-Q8T static void ec8_window(fe8 *X, fe8 *Y, fe8 *D, fe8 *PRE, fe8 *TY, int G, RowFn rowfn) {
++Q8T static void ec8_window_chains(fe8 *X, fe8 *Y, fe8 *D, fe8 *PRE, fe8 *TY, int G, RowFn rowfn) {
+     fe8 run[4]; for (int c = 0; c < 4; c++) fe8_set1(run[c]);
+     const pt *rows[8];
+     for (int g = 0; g < G; g += 4) {
+@@ -726,6 +726,47 @@ Q8T static void ec8_window(fe8 *X, fe8 *Y, fe8 *D, fe8 *PRE, fe8 *TY, int G, Row
+         for (int c = 0; c < 4; c++) { fe8_sub(t[c], X[g + c], x3[c]); fe8_mul(t[c], lam[c], t[c]); fe8_sub(Y[g + c], t[c], Y[g + c]); fe8_mov(X[g + c], x3[c]); }
+     }
+ }
++#ifndef QSB_CPU_TREE_INV
++#define QSB_CPU_TREE_INV 1
++#endif
++/* Experimental balanced product tree for the ordinary window's batch inverse.
++ * The existing PRE allocation has 2*G elements (needed by the folded final window).
++ * Leaves G..2*G-1 retain denominators, internal nodes combine them level by level.
++ * One unchanged Fermat inverse and a breadth-first split replace the four long
++ * prefix-product chains. D stays intact for x3; every arithmetic identity is exact.
++ * Product-tree batch inversion is standard; the experiment is its scheduling here.
++ * Non-power-of-two batches and the final window retain the inherited implementation. */
++template <class RowFn>
++Q8T static void ec8_window(fe8 *X, fe8 *Y, fe8 *D, fe8 *PRE, fe8 *TY, int G, RowFn rowfn) {
++#if QSB_CPU_TREE_INV
++    if (G >= 4 && !(G & (G - 1))) {
++        const pt *rows[8];
++        for (int h = 0; h < G; h++) {
++            if (h + QSB_CPU_PF < G) { const pt *pr[8]; rowfn(h + QSB_CPU_PF, pr); for (int j = 0; j < 8; j++) _mm_prefetch((const char *)pr[j], _MM_HINT_T0); }
++            const __mmask8 ng = rowfn(h, rows);
++            fe8 tx, ty; pt8_load(tx, ty, rows); fe8_cneg(ty, ng);
++            fe8_sub(D[h], tx, X[h]); fe8_sub(TY[h], ty, Y[h]);
++            fe8_mov(PRE[G + h], D[h]);
++        }
++        for (int level = G / 2; level; level /= 2)
++            for (int h = level; h < 2 * level; h++) fe8_mul(PRE[h], PRE[2 * h], PRE[2 * h + 1]);
++        fe8_inv1(PRE[1]);
++        for (int level = 1; level < G; level *= 2)
++            for (int h = level; h < 2 * level; h++) {
++                fe8 left, right; fe8_mov(left, PRE[2 * h]); fe8_mov(right, PRE[2 * h + 1]);
++                fe8_mul(PRE[2 * h], PRE[h], right); fe8_mul(PRE[2 * h + 1], PRE[h], left);
++            }
++        for (int g = G - 4; g >= 0; g -= 4) {
++            fe8 lam[4], t[4], x3[4];
++            for (int c = 0; c < 4; c++) fe8_mul(lam[c], TY[g + c], PRE[G + g + c]);
++            for (int c = 0; c < 4; c++) { fe8_sqr(x3[c], lam[c]); fe8_sub3(x3[c], x3[c], D[g + c], X[g + c]); }
++            for (int c = 0; c < 4; c++) { fe8_sub(t[c], X[g + c], x3[c]); fe8_mul(t[c], lam[c], t[c]); fe8_sub(Y[g + c], t[c], Y[g + c]); fe8_mov(X[g + c], x3[c]); }
++        }
++        return;
++    }
++#endif
++    ec8_window_chains(X, Y, D, PRE, TY, G, rowfn);
++}
+ /* Final step for both recovery ids: Q_ri = C_ri + acc, C_1 = -C_0. Writes the canonical x and the
+  * parity of the canonical y of each (candidate, recid). */
+ Q8T static void ec8_final(const fe8 *X, const fe8 *Y, fe8 *D, fe8 *PRE, int G, const fe &cx, const fe &cy,

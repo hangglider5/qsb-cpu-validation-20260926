@@ -1,0 +1,23 @@
+name: QSB round 3 product tree experiment
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  experiment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Record and prepare
+        run: |
+          uname -a
+          lscpu
+          g++ --version
+          python3 prepare_round3.py
+      - name: Correctness and frozen micro A/B
+        run: |
+          g++ -std=c++17 -O3 -Wno-deprecated-declarations window_test.cpp -o window_test -lcrypto -pthread
+          ./window_test
+      - name: Compile full CPU header and run deterministic hit sets plus worker A/B
+        run: python3 run_round3.py
