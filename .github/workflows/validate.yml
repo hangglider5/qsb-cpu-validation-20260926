@@ -1,0 +1,22 @@
+name: Baseline host primitive validation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  primitives:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Record hardware and source
+        run: |
+          uname -a
+          lscpu
+          g++ --version
+          openssl version
+          python3 prepare.py
+      - name: Compile and verify unchanged upstream primitives
+        run: |
+          g++ -std=c++17 -O3 -Wno-deprecated-declarations primitive_test.cpp -o primitive_test -lcrypto -pthread
+          ./primitive_test
